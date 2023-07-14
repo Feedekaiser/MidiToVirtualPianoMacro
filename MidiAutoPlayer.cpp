@@ -1,6 +1,3 @@
-// Dear Microsoft, if malloc failed, then it is not my fault but the users' 
-
-
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -174,9 +171,9 @@ int main(void)
 			if (play)
 			{
 				Note* note = &notes[i++];
-				if (note->interval > 0) robustSleep(note->interval);
+				
 				if (note->length > 0) SendInput(note->length, note->inputs, sizeof(INPUT));
-
+				if (note->interval > 0) robustSleep(note->interval);
 
 				if (i >= notes.size())
 				{

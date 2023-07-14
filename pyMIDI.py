@@ -272,8 +272,8 @@ class MidiFile:
 midList = []
 
 for file in os.listdir("midi"):
-    if file.endswith(".mid") or file.endswith(".midi"):
-        midList.append(os.path.join("midi", file))
+	if file.endswith(".mid") or file.endswith(".midi"):
+		midList.append(os.path.join("midi", file))
 
 print("input the number for the midi file:")
 for i in range(len(midList)):
@@ -312,8 +312,9 @@ processed_lines = []
 prev_time = 0
 tempo = 120
 
-k = 0
-for l in midi.notes:
+i = 0
+while i < len(midi.notes):
+	l = midi.notes[i]
 	time = int(l[0] * 1000)
 	note = l[1]
 
@@ -321,11 +322,7 @@ for l in midi.notes:
 		tempo = float(note.split("=")[1])
 		note = "="
 
-	if k == 0:
-		k = 1
-		new_time = 0
-	else:
-		new_time =  int((60 / tempo) * (time - prev_time))
-
-	prev_time = time
-	midi.midiSong.write(f"{new_time} {note}\n")
+	next_time = i == len(midi.notes) - 1 and time + 50 or int(midi.notes[i+1][0] * 1000)
+	midi.midiSong.write(f"{int((60 / tempo) * (next_time - time))} {note}\n")
+	time = next_time
+	i += 1
