@@ -11,7 +11,7 @@ Put your `midi` files in the `midi` folder, then run `MidiAutoPlayer.exe` after 
 
 
 ## Compile:
----
+
 Haven't test on anything other than `MSVC`, but it *should* work with `gnu` and `clang` with
 ```
 clang++|g++ MidiAutoPlayer.cpp -lstdc++fs -lwinmm -o MidiAutoPlayer.exe
