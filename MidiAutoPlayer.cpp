@@ -40,34 +40,25 @@ const unsigned int INPUT_BUFFER_SIZE = 16; // does not mean it can press INPUT_B
 
 struct Note
 {
-	int interval; 
+	int interval;
 	int length;
 	INPUT inputs[INPUT_BUFFER_SIZE * 2];
 };
 
-inline int is_capital(char c)
+
+inline int is_not_shifted(char c)
 {
-	return (c >= 'A' && c <= 'Z');
+	return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
 }
 
-inline int is_shifted(char c)
-{
-	return is_capital(c) || !(c >= 'a' && c <= 'z');
-}
-
-inline int is_not_capital(char c)
-{
-	return !is_capital(c);
-}
-
-inline void set_virtual_key(INPUT *input, WORD value, WORD flag = 0)
+inline void set_virtual_key(INPUT* input, WORD value, WORD flag = 0)
 {
 	input->type = INPUT_KEYBOARD;
 	input->ki.wVk = value;
 	input->ki.dwFlags = flag;
 }
 
-void read_line(Note *note, const char* line)
+void read_line(Note* note, const char* line)
 {
 	int i = 0;
 	for (; line[i] != ' '; ++i)
@@ -76,33 +67,19 @@ void read_line(Note *note, const char* line)
 	if (line[++i] == '=')
 		return;
 
-	char buffer_shifted_keys[INPUT_BUFFER_SIZE] { 0 };
-	char buffer_unshifted_keys[INPUT_BUFFER_SIZE] { 0 };
+	char buffer_shifted_keys[INPUT_BUFFER_SIZE]{ 0 };
+	char buffer_unshifted_keys[INPUT_BUFFER_SIZE]{ 0 };
 
-	int  keys_total   = 0;
+	int  keys_total = 0;
 	int  keys_shifted = 0;
 
-	for (; line[i] != '\n' && line[i] != '\0'; ++i)
+	for (; line[i] != '\n' && line[i] != '\0'; ++keys_total, ++i)
 	{
-
-		int shifted = is_shifted(line[i]);
-		char* buffer;
-		int index;
-
-		if (shifted)
-		{
-			buffer = buffer_shifted_keys;
-			index = keys_shifted;
-		}
-		else
-		{
-			buffer = buffer_unshifted_keys;
-			index = keys_total - keys_shifted;
-		}
+		int shifted = !is_not_shifted(line[i]);
+		char* buffer = shifted ? buffer_shifted_keys : buffer_unshifted_keys; // possible branchhless by combining both arrays into 1 and calculate the offset in the index instead.
+		int index = shifted ? keys_shifted : keys_total - keys_shifted;
 
 		buffer[index] = line[i];
-
-		++keys_total;
 		keys_shifted += shifted;
 	}
 
@@ -136,7 +113,8 @@ void read_line(Note *note, const char* line)
 	int inputs_start_index = ((keys_shifted > 0) + keys_shifted) * 2;
 	for (int i = 0; i < keys_total - keys_shifted; ++i)
 	{
-		WORD virtual_key_value = buffer_unshifted_keys[i] - ('a' - 'A');
+		char c = buffer_unshifted_keys[i];
+		WORD virtual_key_value = buffer_unshifted_keys[i] - ('a' - 'A') * (c > '9');
 		set_virtual_key(&note->inputs[inputs_start_index + i * 2], virtual_key_value);
 		set_virtual_key(&note->inputs[inputs_start_index + i * 2 + 1], virtual_key_value, KEYEVENTF_KEYUP);
 	}
@@ -198,7 +176,7 @@ int main(void)
 				Note* note = &notes[i++];
 				if (note->interval > 0) robustSleep(note->interval);
 				if (note->length > 0) SendInput(note->length, note->inputs, sizeof(INPUT));
-				
+
 
 				if (i >= notes.size())
 				{
