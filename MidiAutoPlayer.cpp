@@ -2,6 +2,8 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+#pragma comment(lib, "winmm.lib")
+
 #include <windows.h>
 #include <stdio.h>
 #include <unordered_map>
@@ -28,7 +30,7 @@ void robustSleep(int millisecond)
 
 	// spin
 	while (high_resolution_clock::now() < target)
-		YieldProcessor();
+		_mm_pause();
 }
 
 
@@ -58,19 +60,19 @@ inline void set_virtual_key(INPUT* input, WORD value, WORD flag = 0)
 void read_line(Note* note, const char* line)
 {
 	int i = 0;
+	note->interval = 0;
 	for (; line[i] != ' '; ++i)
 		note->interval = note->interval * 10 + (line[i] - '0');
 
-	if (line[++i] == '=')
-		return;
-
+	if (line[++i] == '=') { note->length = 0; return; }
+		
 	char buffer_shifted_keys[INPUT_BUFFER_SIZE]{ 0 };
 	char buffer_unshifted_keys[INPUT_BUFFER_SIZE]{ 0 };
 
 	int  keys_total = 0;
 	int  keys_shifted = 0;
 
-	for (; line[i] != '\n' && line[i] != '\0'; ++keys_total, ++i)
+	for (; line[i] != '\n'; ++keys_total, ++i)
 	{
 		int shifted = !is_not_shifted(line[i]);
 		char* buffer = shifted ? buffer_shifted_keys : buffer_unshifted_keys; // possible branchhless by combining both arrays into 1 and calculate the offset in the index instead.
@@ -99,13 +101,12 @@ void read_line(Note* note, const char* line)
 		for (int i = 0; i < keys_shifted; ++i)
 		{
 			char c = buffer_shifted_keys[i];
-			WORD virtual_key_value = map.find(c) != map.end() ? map.find(c)->second : c;
+			WORD virtual_key_value = (c < 'A' || c > 'Z') ? map.find(c)->second : c;
 
 			set_virtual_key(&note->inputs[i * 2 + 1], virtual_key_value);
 			set_virtual_key(&note->inputs[i * 2 + 2], virtual_key_value, KEYEVENTF_KEYUP);
 		}
 	}
-
 
 	int inputs_start_index = ((keys_shifted > 0) + keys_shifted) * 2;
 	for (int i = 0; i < keys_total - keys_shifted; ++i)
@@ -117,87 +118,73 @@ void read_line(Note* note, const char* line)
 	}
 }
 
+int get_notes(Note** notes)
+{
+	FILE* file = fopen(FILE_NAME, "r");
+
+	if (!file)
+	{
+		printf("Failed opening %s \nExiting...", FILE_NAME);
+		getchar();
+		exit(-1);
+	}
+
+	printf("Sucessfully opened file.\nBegin Reading...\n");
+
+	char buffer[32];
+	int note_count = -1;
+	int capacity = 256;
+
+	*notes = (Note*)malloc(capacity * sizeof(Note));
+
+	while (fgets(buffer, 32, file))
+	{
+		if (++note_count >= capacity)
+			*notes = (Note*)realloc(*notes, (capacity *= 2) * sizeof(Note));
+
+		read_line(&((*notes)[note_count]), buffer);
+	}
+	++note_count;
+
+	*notes = (Note*)realloc(*notes, note_count * sizeof(Note));
+
+	fclose(file);
+
+	return note_count;
+}
+
 int main(void)
 {
-#pragma comment(lib, "winmm.lib")
 	timeBeginPeriod(PERIOD);
-
-	std::vector<Note> notes;
-
-	{
-		FILE* file = fopen(FILE_NAME, "r");
-
-		if (!file)
-		{
-			printf("Failed opening %s \nExiting...", FILE_NAME);
-			getchar();
-			return -1;
-		}
-
-		printf("Sucessfully opened file.\nBegin Reading...\n");
-
-
-		char buffer[64];
-		while (fgets(buffer, 64, file))
-		{
-			Note note = {};
-			read_line(&note, buffer);
-			notes.push_back(note);
-		}
-		notes.shrink_to_fit();
-
-
-		// mysteriously, this corrupts the data. this however do not copy so it is more efficient
-		//for (; fgets(buffer, 64, file);)
-		//{
-		//	read_line(notes + size, buffer);
-		//	if (++size >= capacity)
-		//	{
-		//		capacity *= 2;
-		//		Note* notes_temp = (Note*)realloc(notes, capacity * sizeof(Note));
-		//	}
-		//}
-		fclose(file);
-	}
+	Note* notes;
+	const int notes_size = get_notes(&notes);	
 
 	printf("loaded the file.\n");
 	for (;;)
 	{
-		int i = 0;
+		int i = -1;
 		bool play = false;
 		printf("Press DEL to start, DEL again to stop, and END to reset.\n");
-		for (;;)
+		while (i < notes_size)
 		{
 			if (play)
 			{
-				Note* note = &notes[i++];
-				
-				if (note->length > 0) SendInput(note->length, note->inputs, sizeof(INPUT));
-				if (note->interval > 0) robustSleep(note->interval);
-
-				if (i >= notes.size())
-				{
-					printf("finished playing\n");
-					break;
-				}
+				Note* note = &notes[++i];
+				SendInput(note->length, note->inputs, sizeof(INPUT));
+				robustSleep(note->interval);
 			}
 			else robustSleep(16);
 
 			if (GetAsyncKeyState(VK_DELETE) & 0x8000)
 			{
-				if (play)
-					printf("stopped\n");
 				play = !play;
-
-				printf("play: %d", play);
+				printf(play ? "starting\n" : "pausing\n");
 				robustSleep(500); // extremely lazy fix to stop it from happening twice in a row and not stopping it.
 			}
-
-			if (GetAsyncKeyState(VK_END) & 0x8000)
-			{
-				i = 0;
-				printf("reset\n");
-			}
 		}
+
+		printf("finished playing\n");
 	}
+
+	return 0;
 }
